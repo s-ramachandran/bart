@@ -14,6 +14,14 @@ extern struct linop_s* maps_create(unsigned long shared_img_flags, const long ma
 			unsigned long sens_flags, const _Complex float* sens);
 extern struct linop_s* maps2_create(const long coilim_dims[DIMS], const long maps_dims[DIMS], const long img_dims[DIMS], const _Complex float* maps);
 
+extern struct linop_s* polyprecond_sense_normal(const struct linop_s* sense_op_normal, 
+												const float* coeffs, 
+												const int D, 
+												const int N, 
+												const long *img_dims);
+extern struct linop_s* linop_polyprecond_create(const struct linop_s* sense_op, 
+												const float* coeffs, int D,
+												const long img_dims[DIMS]); 
 
 #ifdef __cplusplus
 }

@@ -135,4 +135,70 @@ struct linop_s* sense_init(unsigned long shared_img_flags, const long max_dims[D
 }
 
 
+// Shreya start - adding for polynomial preconditioned forward op
+/** Some notes
+* linop_s is struct that is collection of operator_s, one for each of forward/adjoint/normal/norm_inv. (see linop.h)
+* We want new linop_polyprecond to replace the sense_op, and are just replacing the adjoint and normal as:
+* AHA --> P(AHA) * AHA, and AH --> P(AHA) * AH
+*/
 
+struct linop_s* polyprecond_sense_normal(const struct linop_s* sense_op_normal, 
+												const float* coeffs, 
+												const int D, const int N, 
+												const long *img_dims) {
+
+
+	struct linop_s* scale_tmp = linop_scale_create(N, img_dims, coeffs[0]);
+	struct linop_s* out_op = linop_chain( sense_op_normal, scale_tmp );
+
+	linop_free(scale_tmp);
+
+	if (D > 1) {
+		// Increment pointer, update length, and run recursively
+		return linop_plus(out_op, polyprecond_sense_normal(sense_op_normal, coeffs + 1, D - 1, N, img_dims));
+	}
+	else {
+		return out_op;
+	}
+	
+}
+
+/**
+* Linop for Polynomial Preconditioning
+* 
+* @param sense_op	normal sense forward linop to replace with preconditioned version
+* @param coeffs		polynomial coefficients c[0] * I + c[1] * AHA
+*/
+struct linop_s* linop_polyprecond_create(const struct linop_s* sense_op, 
+										const float* coeffs, int D, 
+										const long img_dims[DIMS]) {
+
+	PTR_ALLOC(struct linop_s, p);
+
+	p->forward = operator_ref(sense_op->forward);
+
+	// Get normal sens operators
+	const struct linop_s* sense_normal_linop = linop_get_normal(sense_op);
+
+	// Get preconditioner operator
+	const struct linop_s* precond_op = polyprecond_sense_normal(sense_normal_linop, coeffs, D, DIMS, img_dims);
+
+	// Replace adjoint as P * AH
+	const struct linop_s* adjoint_precond_linop = linop_chain(linop_get_adjoint(sense_op), precond_op);
+	p->adjoint = operator_ref(adjoint_precond_linop->forward);
+
+	// Replace normal as P * AHA
+	const struct linop_s* normal_precond_linop = linop_chain(sense_normal_linop, precond_op);
+	p->normal = operator_ref(normal_precond_linop->forward);
+	p->norm_inv = NULL;
+
+	// Clean up
+	linop_free(sense_normal_linop);
+	linop_free(precond_op);
+	linop_free(normal_precond_linop);
+	linop_free(adjoint_precond_linop);
+
+	return PTR_PASS(p);
+
+}
+// Shreya end

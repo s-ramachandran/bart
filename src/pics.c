@@ -246,6 +246,7 @@ int main_pics(int argc, char* argv[argc])
 	bool scale_im = false;
 	bool eigen = false;
 	float scaling = 0.;
+	bool use_polyprecond = true; // Shreya - adding option
 
         // Simultaneous Multi-Slice
         bool sms = false;
@@ -340,6 +341,7 @@ int main_pics(int argc, char* argv[argc])
 		OPTL_SET(0, "fista_last", &fista.last, "end iteration with call to data consistency"),
 		OPTL_INFILE(0, "motion-field", &motion_file, "file", "motion field"),
 		OPTL_SUBOPT(0, "nufft-conf", "...", "configure nufft", N_nufft_conf_opts, nufft_conf_opts),
+		OPTL_SET(0, "polyprecond", &use_polyprecond, "use polynomial preconditioning"), // Shreya - adding option
 	};
 
 
@@ -639,11 +641,28 @@ int main_pics(int argc, char* argv[argc])
 			traj_tmp = md_gpu_move(DIMS, traj_dims, traj, CFL_SIZE);
 		}
 #endif
-
-		forward_op = sense_nc_init(max_dims, map_dims, maps, ksp_dims,
+		// Shreya start - this makes the NUFFT SENSE forward operator - changed name
+		const struct linop_s* sense_op = NULL;
+		sense_op = sense_nc_init(max_dims, map_dims, maps, ksp_dims,
 				traj_dims, traj_tmp, nuconf,
 				pat_dims, pattern,
 				basis_dims, basis, &nufft_op, shared_img_flags & ~motion_flags, lowmem_flags);
+
+		// Shreya start - adding polynomial preconditioning option. 
+		// TODO - replace coeffs. Using hardcoded coeffs for now
+		if (use_polyprecond) {
+			const float coeffs[4] = {12.0, -42.0, 56.0, -25.2000007629395};
+			// const float coeffs[6] = {24.0, -180.0, 600.0, -990.0, 792.0, -245.142852783203}
+			// const float coeffs[8] = {39.9999809265137, -513.332824707031, 3079.99609375, 
+			// 						-10009.984375, 18685.30078125, -20019.9609375, 
+			// 						11439.9755859375, -2701.10498046875};
+			forward_op = linop_polyprecond_create(sense_op, coeffs, 4, img_dims);
+		}
+		else {
+			forward_op = sense_op;
+		}
+		linop_free(sense_op);
+		// Shreya end
 
 #ifdef USE_CUDA
 		if (gpu_gridding)
@@ -810,6 +829,11 @@ int main_pics(int argc, char* argv[argc])
 		debug_printf(DP_INFO, "Maximum eigenvalue: %.2e\n", maxeigen);
 	}
 
+	// Shreya start - adding scaling for forward operator to make max eigenval is 1
+	const struct linop_s* scale_eig = linop_scale_create(DIMS, ksp_dims, sqrt(maxeigen));
+	forward_op = linop_chain(forward_op, scale_eig);
+	linop_free(scale_eig);
+	// Shreya end
 
 	// initialize prox functions
 
