@@ -201,4 +201,26 @@ struct linop_s* linop_polyprecond_create(const struct linop_s* sense_op,
 	return PTR_PASS(p);
 
 }
+
+// Fill coeffs array with polynomial coefficients
+float* get_polyprecond_coeffs(const int polyprecond_deg) {
+
+	if (polyprecond_deg == 4) {
+		static float coeffs[4] = {12.0, -42.0, 56.0, -25.2000007629395};
+		return coeffs;
+	}
+	else if (polyprecond_deg == 6) {
+		static float coeffs[6] = {24.0, -180.0, 600.0, -990.0, 792.0, -245.142852783203};
+		return coeffs;
+	}
+	else if (polyprecond_deg == 8) {
+		static float coeffs[8] = {39.9999809265137, -513.332824707031, 3079.99609375, 
+								-10009.984375, 18685.30078125, -20019.9609375, 
+								11439.9755859375, -2701.10498046875};
+		return coeffs;
+	}
+	else {
+		return NULL; // unsupported degree
+	}
+}
 // Shreya end

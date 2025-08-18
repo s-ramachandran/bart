@@ -22,6 +22,7 @@ extern struct linop_s* polyprecond_sense_normal(const struct linop_s* sense_op_n
 extern struct linop_s* linop_polyprecond_create(const struct linop_s* sense_op, 
 												const float* coeffs, int D,
 												const long img_dims[DIMS]); 
+float* get_polyprecond_coeffs(const int polyprecond_deg);
 
 #ifdef __cplusplus
 }
