@@ -246,7 +246,7 @@ int main_pics(int argc, char* argv[argc])
 	bool scale_im = false;
 	bool eigen = false;
 	float scaling = 0.;
-	bool use_polyprecond = true; // Shreya - adding option
+	bool use_polyprecond = false; // Shreya - adding option
 	int polyprecond_deg = 4; // Shreya - adding option
 
         // Simultaneous Multi-Slice
@@ -643,24 +643,10 @@ int main_pics(int argc, char* argv[argc])
 			traj_tmp = md_gpu_move(DIMS, traj_dims, traj, CFL_SIZE);
 		}
 #endif
-		// Shreya start - this makes the NUFFT SENSE forward operator - changed name
-		const struct linop_s* sense_op = NULL;
-		sense_op = sense_nc_init(max_dims, map_dims, maps, ksp_dims,
+		forward_op = sense_nc_init(max_dims, map_dims, maps, ksp_dims,
 				traj_dims, traj_tmp, nuconf,
 				pat_dims, pattern,
 				basis_dims, basis, &nufft_op, shared_img_flags & ~motion_flags, lowmem_flags);
-
-		// Shreya start - adding polynomial preconditioning option. 
-		// TODO - replace coeffs. Using hardcoded coeffs for now
-		if (use_polyprecond) {
-			const float* coeffs = get_polyprecond_coeffs(polyprecond_deg);
-			forward_op = linop_polyprecond_create(sense_op, coeffs, polyprecond_deg, img_dims);
-		}
-		else {
-			forward_op = sense_op;
-		}
-		linop_free(sense_op);
-		// Shreya end
 
 #ifdef USE_CUDA
 		if (gpu_gridding)
@@ -819,7 +805,7 @@ int main_pics(int argc, char* argv[argc])
 
 	double maxeigen = 1.;
 
-	if (eigen && (ALGO_PRIDU != algo)) {
+	if ((eigen && (ALGO_PRIDU != algo)) || (use_polyprecond)) { // Shreya add maxeig for polyprecond
 
 		// Maxeigen in PRIDU must include regularizations
 		maxeigen = estimate_maxeigenval(forward_op->normal);
@@ -829,9 +815,14 @@ int main_pics(int argc, char* argv[argc])
 
 	// Shreya start - adding scaling for forward operator to make max eigenval 1 if using polyprecond
 	if (use_polyprecond) {
-		const struct linop_s* scale_eig = linop_scale_create(DIMS, ksp_dims, sqrt(maxeigen));
+		const float* coeffs = get_polyprecond_coeffs(polyprecond_deg);
+		forward_op = linop_polyprecond_create(forward_op, coeffs, polyprecond_deg, img_dims);
+
+		const struct linop_s* scale_eig = linop_scale_create(DIMS, ksp_dims, 1/sqrt(maxeigen));
 		forward_op = linop_chain(forward_op, scale_eig);
 		linop_free(scale_eig);
+
+		debug_printf(DP_DEBUG1, "Scaled by 1/sqrt(max eig): %f\n", 1/sqrt(maxeigen));
 	}
 	// Shreya end
 
