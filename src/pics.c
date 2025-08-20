@@ -343,7 +343,7 @@ int main_pics(int argc, char* argv[argc])
 		OPTL_INFILE(0, "motion-field", &motion_file, "file", "motion field"),
 		OPTL_SUBOPT(0, "nufft-conf", "...", "configure nufft", N_nufft_conf_opts, nufft_conf_opts),
 		OPTL_SET(0, "polyprecond", &use_polyprecond, "use polynomial preconditioning"), // Shreya - adding option
-		OPTL_INT(0, "degree", &polyprecond_deg, "polyprecond_deg", "polynomial degree for poly preconditioning"), // Shreya - adding option
+		OPTL_INT(0, "degree", &polyprecond_deg, "int", "polynomial degree for poly preconditioning"), // Shreya - adding option
 	};
 
 
@@ -805,7 +805,7 @@ int main_pics(int argc, char* argv[argc])
 
 	double maxeigen = 1.;
 
-	// Shreya - add maxeig calculation for polyprecond and unspecified step size
+	// Shreya - add maxeig calculation for both  polyprecond and for unspecified step size
 	if ((eigen && (ALGO_PRIDU != algo)) || (use_polyprecond) || (step == -1.)) { 
 
 		// Maxeigen in PRIDU must include regularizations
