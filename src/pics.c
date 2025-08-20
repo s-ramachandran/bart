@@ -805,7 +805,8 @@ int main_pics(int argc, char* argv[argc])
 
 	double maxeigen = 1.;
 
-	if ((eigen && (ALGO_PRIDU != algo)) || (use_polyprecond)) { // Shreya add maxeig for polyprecond
+	// Shreya - add maxeig calculation for polyprecond and unspecified step size
+	if ((eigen && (ALGO_PRIDU != algo)) || (use_polyprecond) || (step == -1.)) { 
 
 		// Maxeigen in PRIDU must include regularizations
 		maxeigen = estimate_maxeigenval(forward_op->normal);
@@ -815,12 +816,16 @@ int main_pics(int argc, char* argv[argc])
 
 	// Shreya start - adding scaling for forward operator to make max eigenval 1 if using polyprecond
 	if (use_polyprecond) {
-		const float* coeffs = get_polyprecond_coeffs(polyprecond_deg);
-		forward_op = linop_polyprecond_create(forward_op, coeffs, polyprecond_deg, img_dims);
 
+		// Normalize max eig of forward operator to 1
 		const struct linop_s* scale_eig = linop_scale_create(DIMS, ksp_dims, 1/sqrt(maxeigen));
 		forward_op = linop_chain(forward_op, scale_eig);
-		linop_free(scale_eig);
+
+		maxeigen = 1.; // now normalized so reset
+
+		// Replace with preconditioned version
+		const float* coeffs = get_polyprecond_coeffs(polyprecond_deg);
+		forward_op = linop_polyprecond_create(forward_op, coeffs, polyprecond_deg, img_dims);
 
 		debug_printf(DP_DEBUG1, "Scaled by 1/sqrt(max eig): %f\n", 1/sqrt(maxeigen));
 	}

@@ -39,6 +39,7 @@
 #include "linops/fmac.h"
 
 #include "misc/mri.h"
+#include "misc/debug.h"
 
 
 
@@ -142,23 +143,28 @@ struct linop_s* sense_init(unsigned long shared_img_flags, const long max_dims[D
 * AHA --> P(AHA) * AHA, and AH --> P(AHA) * AH
 */
 
-struct linop_s* polyprecond_sense_normal(const struct linop_s* sense_op_normal, 
+struct linop_s* polyprecond_sense_normal(const struct linop_s* sense_linop_normal, 
 												const float* coeffs, 
 												const int D, const int N, 
 												const long *img_dims) {
 
-
+	// Linop that scales by first coefficient passed in
 	struct linop_s* scale_tmp = linop_scale_create(N, img_dims, coeffs[0]);
-	struct linop_s* out_op = linop_chain( sense_op_normal, scale_tmp );
+	// Apply scaling to AHA c[0] * I
+	struct linop_s* out_linop = linop_chain(sense_linop_normal, scale_tmp );
 
 	linop_free(scale_tmp);
 
 	if (D > 1) {
 		// Increment pointer, update length, and run recursively
-		return linop_plus(out_op, polyprecond_sense_normal(sense_op_normal, coeffs + 1, D - 1, N, img_dims));
+		return linop_plus(out_linop, 
+				linop_chain( 
+					polyprecond_sense_normal(sense_linop_normal, coeffs + 1, D - 1, N, img_dims), 
+					sense_linop_normal)
+			);
 	}
 	else {
-		return out_op;
+		return out_linop;
 	}
 	
 }
@@ -169,41 +175,43 @@ struct linop_s* polyprecond_sense_normal(const struct linop_s* sense_op_normal,
 * @param sense_op	normal sense forward linop to replace with preconditioned version
 * @param coeffs		polynomial coefficients c[0] * I + c[1] * AHA
 */
-struct linop_s* linop_polyprecond_create(const struct linop_s* sense_op, 
+struct linop_s* linop_polyprecond_create(const struct linop_s* sense_linop, 
 										const float* coeffs, int D, 
 										const long img_dims[DIMS]) {
 
 	PTR_ALLOC(struct linop_s, p);
 
-	p->forward = operator_ref(sense_op->forward);
+	p->forward = operator_ref(sense_linop->forward);
 
-	// Get normal sens operators
-	const struct linop_s* sense_normal_linop = linop_get_normal(sense_op);
+	// Get normal of SENSE as linop
+	const struct linop_s* sense_normal_linop = linop_get_normal(sense_linop);
 
 	// Get preconditioner operator
-	const struct linop_s* precond_op = polyprecond_sense_normal(sense_normal_linop, coeffs, D, DIMS, img_dims);
+	const struct linop_s* precond_linop = polyprecond_sense_normal(sense_normal_linop, coeffs, D, DIMS, img_dims);
 
 	// Replace adjoint as P * AH
-	const struct linop_s* adjoint_precond_linop = linop_chain(linop_get_adjoint(sense_op), precond_op);
+	const struct linop_s* adjoint_precond_linop = linop_chain(linop_get_adjoint(sense_linop), precond_linop);
 	p->adjoint = operator_ref(adjoint_precond_linop->forward);
 
 	// Replace normal as P * AHA
-	const struct linop_s* normal_precond_linop = linop_chain(sense_normal_linop, precond_op);
+	const struct linop_s* normal_precond_linop = linop_chain_FF(sense_normal_linop, precond_linop);
 	p->normal = operator_ref(normal_precond_linop->forward);
 	p->norm_inv = NULL;
 
 	// Clean up
-	linop_free(sense_normal_linop);
-	linop_free(precond_op);
 	linop_free(normal_precond_linop);
 	linop_free(adjoint_precond_linop);
+	linop_free(sense_linop);
 
 	return PTR_PASS(p);
 
 }
 
-// Fill coeffs array with polynomial coefficients
+/* Returns coeffs array with polynomial coefficients from l_2_opt calculations
+*  Assumes max eigenvalue is 1 
+*/
 float* get_polyprecond_coeffs(const int polyprecond_deg) {
+	// TODO - replace with function that calculates coeffs given degree and max_eig
 
 	if (polyprecond_deg == 4) {
 		static float coeffs[4] = {12.0, -42.0, 56.0, -25.2000007629395};
