@@ -137,7 +137,7 @@ struct linop_s* sense_init(unsigned long shared_img_flags, const long max_dims[D
 
 
 // Shreya start - adding for polynomial preconditioned forward op
-/** Some notes
+/** 
 * linop_s is struct that is collection of operator_s, one for each of forward/adjoint/normal/norm_inv. (see linop.h)
 * We want new linop_polyprecond to replace the sense_op, and are just replacing the adjoint and normal as:
 * AHA --> P(AHA) * AHA, and AH --> P(AHA) * AH
@@ -149,22 +149,19 @@ struct linop_s* polyprecond_sense_normal(const struct linop_s* sense_linop_norma
 												const long *img_dims) {
 
 	// Linop that scales by first coefficient passed in
-	struct linop_s* scale_tmp = linop_scale_create(N, img_dims, coeffs[0]);
-	// Apply scaling to AHA c[0] * I
-	struct linop_s* out_linop = linop_chain(sense_linop_normal, scale_tmp );
+	struct linop_s* out_linop = linop_scale_create(N, img_dims, coeffs[0]);
 
-	linop_free(scale_tmp);
-
-	if (D > 1) {
+	if (D == 1) {
+		return out_linop;
+	}
+	else {
 		// Increment pointer, update length, and run recursively
+		// return c[0]*I + AHA * phelper
 		return linop_plus(out_linop, 
 				linop_chain( 
 					polyprecond_sense_normal(sense_linop_normal, coeffs + 1, D - 1, N, img_dims), 
 					sense_linop_normal)
 			);
-	}
-	else {
-		return out_linop;
 	}
 	
 }
@@ -208,11 +205,14 @@ struct linop_s* linop_polyprecond_create(const struct linop_s* sense_linop,
 }
 
 /* Returns coeffs array with polynomial coefficients from l_2_opt calculations
-*  Assumes max eigenvalue is 1 
+*  Important - these coefficients only work when max eigenvalue of A is 1
+*  So A must be normalized before preconditioner applied
 */
 float* get_polyprecond_coeffs(const int polyprecond_deg) {
 	// TODO - replace with function that calculates coeffs given degree and max_eig
 
+	// First coefficient is just scaling, so degree 4 means polynomial is:
+	// c[0] + c[1]*x + c[2]*x^2 + c[3]*x^3 (highest power is 3)
 	if (polyprecond_deg == 4) {
 		static float coeffs[4] = {12.0, -42.0, 56.0, -25.2000007629395};
 		return coeffs;

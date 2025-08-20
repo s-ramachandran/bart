@@ -819,14 +819,9 @@ int main_pics(int argc, char* argv[argc])
 
 		// Normalize max eig of forward operator to 1
 		const struct linop_s* scale_eig = linop_scale_create(DIMS, ksp_dims, 1/sqrt(maxeigen));
-		forward_op = linop_chain(forward_op, scale_eig);
+		forward_op = linop_chain_FF(forward_op, scale_eig);
 
 		maxeigen = 1.; // now normalized so reset
-
-		// Replace with preconditioned version
-		const float* coeffs = get_polyprecond_coeffs(polyprecond_deg);
-		forward_op = linop_polyprecond_create(forward_op, coeffs, polyprecond_deg, img_dims);
-
 		debug_printf(DP_DEBUG1, "Scaled by 1/sqrt(max eig): %f\n", 1/sqrt(maxeigen));
 	}
 	// Shreya end
@@ -836,7 +831,6 @@ int main_pics(int argc, char* argv[argc])
 	const struct operator_p_s* thresh_ops[NUM_REGS] = { NULL };
 	const struct linop_s* trafos[NUM_REGS] = { NULL };
 
-
 	opt_reg_configure(DIMS, img_dims, &ropts, thresh_ops, trafos, NULL, llr_blk, shift_mode, wtype_str, conf.gpu, ITER_DIM);
 
 	if (conf.bpsense)
@@ -844,6 +838,14 @@ int main_pics(int argc, char* argv[argc])
 
 	if (conf.precond)
 		opt_precond_configure(&ropts, thresh_ops, trafos, forward_op, DIMS, ksp_dims, kspace_p, pat_dims, conf.precond ? pattern : NULL);
+
+	// Shreya - poly precond after original precond_configure
+	if (use_polyprecond) {
+		// Replace forward_op with preconditioned version
+		const float* coeffs = get_polyprecond_coeffs(polyprecond_deg);
+		forward_op = linop_polyprecond_create(forward_op, coeffs, polyprecond_deg, img_dims);
+	}
+	// Shreya end
 
 	int nr_penalties = ropts.r + ropts.sr;
 
